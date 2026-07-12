@@ -6,7 +6,7 @@ from panda import DLC_TO_LEN, Panda
 
 SAFETY_TEST_ADDR = 0x1FFFFF00
 
-SET_HOOKS, RX_HOOK, TX_HOOK, FWD_HOOK, LOAD_PACKET, TICK, CONFIG_VALID, INIT, IGNITION_HOOK, GET, SET = range(1, 12)
+SET_HOOKS, RX_HOOK, TX_HOOK, FWD_HOOK, LOAD_PACKET, TICK, CONFIG_VALID, INIT, IGNITION_HOOK, GET, SET, RX_PACKET, TX_PACKET = range(1, 14)
 
 VALUES = {
   "controls_allowed": 1, "longitudinal_allowed": 2, "alternative_experience": 3,
@@ -53,16 +53,23 @@ class PandaSafety:
     if len(dat) > 55:
       self._call(LOAD_PACKET, payload=header + bytes((55,)) + dat[55:])
 
+  def _hook(self, op, packet_op, msg):
+    packet = msg[0]
+    dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
+    if len(dat) <= 56:
+      header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
+      return bool(self._call(packet_op, payload=header + dat))
+    self._load(msg)
+    return bool(self._call(op))
+
   def set_safety_hooks(self, mode, param):
     return self._call(SET_HOOKS, mode, param)
 
   def safety_rx_hook(self, msg):
-    self._load(msg)
-    return bool(self._call(RX_HOOK))
+    return self._hook(RX_HOOK, RX_PACKET, msg)
 
   def safety_tx_hook(self, msg):
-    self._load(msg)
-    return bool(self._call(TX_HOOK))
+    return self._hook(TX_HOOK, TX_PACKET, msg)
 
   def safety_fwd_hook(self, bus, addr):
     return self._call(FWD_HOOK, bus, addr)

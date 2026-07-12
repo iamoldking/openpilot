@@ -1,5 +1,4 @@
 import atexit
-import os
 import struct
 import threading
 import time
@@ -124,20 +123,19 @@ class PandaSafety:
   def safety_tx_hook(self, msg):
     packet = msg[0]
     dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
-    if os.getenv("SAFETY_TEST_DEBUG"):
-      print("tx", dat.hex(), "desired", self.get_desired_curvature_last())
     if len(dat) <= 54:
       header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
       state = bytes((self.controls_allowed, self.relay_malfunction))
       ret = bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
-      if not ret and os.getenv("SAFETY_TEST_DEBUG"):
-        print("blocked tx", {name: getattr(self, f"get_{name}")() for name in (
-          "controls_allowed", "vehicle_speed_min", "vehicle_speed_max", "desired_curvature_last",
-          "curvature_meas_min", "curvature_meas_max")})
+      self.controls_allowed = self.last_controls_allowed
+      self.relay_malfunction = self.last_relay_malfunction
       return ret
     self._set_value("controls_allowed", self.controls_allowed)
     self._set_value("relay_malfunction", self.relay_malfunction)
-    return self._hook(TX_HOOK, TX_PACKET, msg)
+    ret = self._hook(TX_HOOK, TX_PACKET, msg)
+    self.controls_allowed = self.last_controls_allowed
+    self.relay_malfunction = self.last_relay_malfunction
+    return ret
 
   def safety_fwd_hook(self, bus, addr):
     return self._call(FWD_HOOK_STATE, bus, addr, payload=bytes((self.relay_malfunction,)))
@@ -198,7 +196,8 @@ class PandaSafety:
         return ret / 1000.0 if name in ("get_vehicle_speed_min", "get_vehicle_speed_max") else ret
       return get_value
     if name.startswith("set_"):
-      return lambda a, b=0: self._set_value(name[4:], a, b)
+      value = "desired_curvature" if name == "set_desired_curvature_last" else name[4:]
+      return lambda a, b=0: self._set_value(value, a, b)
     raise AttributeError(name)
 
 

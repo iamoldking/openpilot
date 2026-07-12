@@ -7,7 +7,8 @@ from panda import DLC_TO_LEN, Panda
 
 SAFETY_TEST_ADDR = 0x1FFFFF00
 
-SET_HOOKS, RX_HOOK, TX_HOOK, FWD_HOOK, LOAD_PACKET, TICK, CONFIG_VALID, INIT, IGNITION_HOOK, GET, SET, RX_PACKET, TX_PACKET = range(1, 14)
+SET_HOOKS, RX_HOOK, TX_HOOK, FWD_HOOK, LOAD_PACKET, TICK, CONFIG_VALID, INIT, IGNITION_HOOK, GET, SET, RX_PACKET, TX_PACKET, \
+  FWD_HOOK_STATE, TX_PACKET_STATE = range(1, 16)
 
 VALUES = {
   "controls_allowed": 1, "longitudinal_allowed": 2, "alternative_experience": 3,
@@ -52,6 +53,9 @@ class PandaSafety:
       for addr, response, bus in self.panda.can_recv():
         if addr == SAFETY_TEST_ADDR and bus == 195:
           self.last_relay_malfunction = bool(response[5])
+          mode = struct.unpack_from("<H", response, 6)[0]
+          if hasattr(self, "safety_mode") and op != SET_HOOKS:
+            assert mode == self.safety_mode, (mode, self.safety_mode)
           return struct.unpack_from("<i", response, 1)[0]
     raise TimeoutError("panda safety test RPC timed out")
 
@@ -74,7 +78,9 @@ class PandaSafety:
 
   def set_safety_hooks(self, mode, param):
     self.relay_malfunction = False
-    return self._call(SET_HOOKS, mode, param)
+    ret = self._call(SET_HOOKS, mode, param)
+    self.safety_mode = int(mode)
+    return ret
 
   def safety_rx_hook(self, msg):
     self._set_value("relay_malfunction", self.relay_malfunction)
@@ -83,12 +89,16 @@ class PandaSafety:
     return ret
 
   def safety_tx_hook(self, msg):
+    packet = msg[0]
+    dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
+    if len(dat) <= 55:
+      header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
+      return bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(55 - len(dat)) + bytes((self.relay_malfunction,))))
     self._set_value("relay_malfunction", self.relay_malfunction)
     return self._hook(TX_HOOK, TX_PACKET, msg)
 
   def safety_fwd_hook(self, bus, addr):
-    self._set_value("relay_malfunction", self.relay_malfunction)
-    return self._call(FWD_HOOK, bus, addr)
+    return self._call(FWD_HOOK_STATE, bus, addr, payload=bytes((self.relay_malfunction,)))
 
   def _set_value(self, name, a, b=0):
     return self._call(SET, payload=bytes((VALUES[name],)) + struct.pack("<ii", int(a), int(b)))

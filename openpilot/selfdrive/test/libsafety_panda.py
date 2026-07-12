@@ -124,6 +124,8 @@ class PandaSafety:
   def safety_tx_hook(self, msg):
     packet = msg[0]
     dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
+    if os.getenv("SAFETY_TEST_DEBUG"):
+      print("tx", dat.hex(), "desired", self.get_desired_curvature_last())
     if len(dat) <= 54:
       header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
       state = bytes((self.controls_allowed, self.relay_malfunction))

@@ -34,6 +34,7 @@ class PandaSafety:
     atexit.register(self._close)
     self.test_timer = 0
     self.panda_timer = None
+    self.relay_malfunction = False
 
   def _close(self):
     for bus in range(3):
@@ -50,6 +51,7 @@ class PandaSafety:
     while time.monotonic() < deadline:
       for addr, response, bus in self.panda.can_recv():
         if addr == SAFETY_TEST_ADDR and bus == 195:
+          self.last_relay_malfunction = bool(response[5])
           return struct.unpack_from("<i", response, 1)[0]
     raise TimeoutError("panda safety test RPC timed out")
 
@@ -71,16 +73,32 @@ class PandaSafety:
     return bool(self._call(op))
 
   def set_safety_hooks(self, mode, param):
+    self.relay_malfunction = False
     return self._call(SET_HOOKS, mode, param)
 
   def safety_rx_hook(self, msg):
-    return self._hook(RX_HOOK, RX_PACKET, msg)
+    self._set_value("relay_malfunction", self.relay_malfunction)
+    ret = self._hook(RX_HOOK, RX_PACKET, msg)
+    self.relay_malfunction = self.last_relay_malfunction
+    return ret
 
   def safety_tx_hook(self, msg):
+    self._set_value("relay_malfunction", self.relay_malfunction)
     return self._hook(TX_HOOK, TX_PACKET, msg)
 
   def safety_fwd_hook(self, bus, addr):
+    self._set_value("relay_malfunction", self.relay_malfunction)
     return self._call(FWD_HOOK, bus, addr)
+
+  def _set_value(self, name, a, b=0):
+    return self._call(SET, payload=bytes((VALUES[name],)) + struct.pack("<ii", int(a), int(b)))
+
+  def set_relay_malfunction(self, malfunction):
+    self.relay_malfunction = bool(malfunction)
+    self._set_value("relay_malfunction", malfunction)
+
+  def get_relay_malfunction(self):
+    return self.relay_malfunction
 
   def safety_tick_current_safety_config(self):
     self._call(TICK)
@@ -119,8 +137,7 @@ class PandaSafety:
         return ret / 1000.0 if name in ("get_vehicle_speed_min", "get_vehicle_speed_max") else ret
       return get_value
     if name.startswith("set_"):
-      value = VALUES[name[4:]]
-      return lambda a, b=0: self._call(SET, payload=bytes((value,)) + struct.pack("<ii", int(a), int(b)))
+      return lambda a, b=0: self._set_value(name[4:], a, b)
     raise AttributeError(name)
 
 

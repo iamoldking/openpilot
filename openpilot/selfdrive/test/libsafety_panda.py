@@ -1,4 +1,5 @@
 import atexit
+import os
 import struct
 import threading
 import time
@@ -126,7 +127,12 @@ class PandaSafety:
     if len(dat) <= 54:
       header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
       state = bytes((self.controls_allowed, self.relay_malfunction))
-      return bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
+      ret = bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
+      if not ret and os.getenv("SAFETY_TEST_DEBUG"):
+        print("blocked tx", {name: getattr(self, f"get_{name}")() for name in (
+          "controls_allowed", "vehicle_speed_min", "vehicle_speed_max", "desired_curvature_last",
+          "curvature_meas_min", "curvature_meas_max")})
+      return ret
     self._set_value("controls_allowed", self.controls_allowed)
     self._set_value("relay_malfunction", self.relay_malfunction)
     return self._hook(TX_HOOK, TX_PACKET, msg)

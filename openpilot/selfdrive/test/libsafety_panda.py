@@ -41,6 +41,7 @@ class PandaSafety:
     atexit.register(self._close)
     self.test_timer = 0
     self.panda_timer = None
+    self.timer_advanced = False
     self.relay_malfunction = False
     self.controls_allowed = False
 
@@ -124,9 +125,11 @@ class PandaSafety:
     packet = msg[0]
     dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
     if len(dat) <= 54:
-      header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
+      fd_flags = int(packet.fd) | (0 if self.timer_advanced else 2)
+      header = bytes((fd_flags, int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
       state = bytes((self.controls_allowed, self.relay_malfunction))
       ret = bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
+      self.timer_advanced = False
       self.controls_allowed = self.last_controls_allowed
       self.relay_malfunction = self.last_relay_malfunction
       return ret
@@ -168,6 +171,7 @@ class PandaSafety:
     self._call(INIT)
     self.test_timer = 0
     self.panda_timer = self._call(GET, payload=bytes((VALUES["timer"],)))
+    self.timer_advanced = False
 
   def set_timer(self, timer):
     delta = int(timer) - self.test_timer
@@ -182,6 +186,7 @@ class PandaSafety:
     assert delta <= elapsed < delta + 100_000, (delta, elapsed)
     self.test_timer = int(timer)
     self.panda_timer = now
+    self.timer_advanced = delta != 0
 
   def ignition_can_hook(self, msg):
     self._load(msg)

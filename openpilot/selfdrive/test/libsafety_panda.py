@@ -1,5 +1,6 @@
 import atexit
 import struct
+import threading
 import time
 
 from panda import DLC_TO_LEN, Panda
@@ -32,14 +33,23 @@ class PandaSafety:
     self.panda.can_clear(0xFFFF)
     for bus in range(3):
       self.panda.set_can_enable(bus, False)
+    self.stop_event = threading.Event()
+    self.heartbeat_thread = threading.Thread(target=self._heartbeat, daemon=True)
+    self.heartbeat_thread.start()
     atexit.register(self._close)
     self.test_timer = 0
     self.panda_timer = None
     self.relay_malfunction = False
 
   def _close(self):
+    self.stop_event.set()
+    self.heartbeat_thread.join()
     for bus in range(3):
       self.panda.set_can_enable(bus, True)
+
+  def _heartbeat(self):
+    while not self.stop_event.wait(0.5):
+      self.panda.send_heartbeat(engaged=True)
 
   def _call(self, op, *args, payload=b""):
     dat = bytearray(64)

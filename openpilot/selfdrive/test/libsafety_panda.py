@@ -106,10 +106,10 @@ class PandaSafety:
   def __getattr__(self, name):
     if name.startswith("get_"):
       value = VALUES[name[4:]]
-      ret = self._call(GET, payload=bytes((value,)))
-      if name in ("get_vehicle_speed_min", "get_vehicle_speed_max"):
-        return ret / 1000.0
-      return ret
+      def get_value():
+        ret = self._call(GET, payload=bytes((value,)))
+        return ret / 1000.0 if name in ("get_vehicle_speed_min", "get_vehicle_speed_max") else ret
+      return get_value
     if name.startswith("set_"):
       value = VALUES[name[4:]]
       return lambda a, b=0: self._call(SET, payload=bytes((value,)) + struct.pack("<ii", int(a), int(b)))

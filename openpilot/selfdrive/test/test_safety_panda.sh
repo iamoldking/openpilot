@@ -20,4 +20,4 @@ PY
 sleep 2
 
 export LIBSAFETY_BACKEND=openpilot.selfdrive.test.libsafety_panda
-python -m unittest discover -s opendbc_repo/opendbc/safety/tests -p 'test_*.py'
+python -m unittest discover -v -s opendbc_repo/opendbc/safety/tests -p "${SAFETY_TEST_PATTERN:-test_*.py}"

@@ -91,7 +91,7 @@ def deviceStage(String stageName, String deviceType, List extra_env, def steps) 
 
     lock(resource: "", label: deviceType, inversePrecedence: true, variable: 'device_ip', quantity: 1, resourceSelectStrategy: 'random') {
       docker.image('ghcr.io/commaai/alpine-ssh').inside('--user=root') {
-        timeout(time: 35, unit: 'MINUTES') {
+        timeout(time: 120, unit: 'MINUTES') {
           retry (3) {
             def date = sh(script: 'date', returnStdout: true).trim();
             device(device_ip, "set time", "date -s '" + date + "'")
@@ -170,7 +170,7 @@ node {
 
   if (env.BRANCH_NAME == 'tmp-jenkins-hitl-safety') {
     deviceStage("safety panda", "tizi-common", ["UNSAFE=1"], [
-      step("safety panda", "openpilot/selfdrive/test/test_safety_panda.sh", [timeout: 1800]),
+      step("safety panda", "SAFETY_TEST_PATTERN=test_body.py openpilot/selfdrive/test/test_safety_panda.sh", [timeout: 7000]),
     ])
     return
   }

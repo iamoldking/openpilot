@@ -28,6 +28,8 @@ class PandaSafety:
   def __init__(self):
     self.panda = Panda()
     self.panda.can_clear(0xFFFF)
+    self.test_timer = 0
+    self.panda_timer = None
 
   def _call(self, op, *args, payload=b""):
     dat = bytearray(64)
@@ -73,6 +75,22 @@ class PandaSafety:
 
   def init_tests(self):
     self._call(INIT)
+    self.test_timer = 0
+    self.panda_timer = self._call(GET, payload=bytes((VALUES["timer"],)))
+
+  def set_timer(self, timer):
+    delta = int(timer) - self.test_timer
+    if delta < 0:
+      raise ValueError("panda safety test timer cannot move backwards")
+    if delta:
+      time.sleep(delta / 1e6)
+
+    now = self._call(GET, payload=bytes((VALUES["timer"],)))
+    if self.panda_timer is not None:
+      elapsed = (now - self.panda_timer) & 0xFFFFFFFF
+      assert delta <= elapsed < delta + 100_000, (delta, elapsed)
+    self.test_timer = int(timer)
+    self.panda_timer = now
 
   def ignition_can_hook(self, msg):
     self._load(msg)

@@ -170,7 +170,7 @@ node {
 
   if (env.BRANCH_NAME == 'tmp-jenkins-hitl-safety') {
     deviceStage("safety panda", "tizi-common", ["UNSAFE=1"], [
-      step("safety panda", "SAFETY_TEST_PATTERN=test_body.py openpilot/selfdrive/test/test_safety_panda.sh", [timeout: 7000]),
+      step("safety panda", "SAFETY_TEST_PATTERN=test_chrysler.py openpilot/selfdrive/test/test_safety_panda.sh", [timeout: 7000]),
     ])
     return
   }

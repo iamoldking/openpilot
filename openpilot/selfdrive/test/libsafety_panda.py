@@ -37,7 +37,7 @@ class PandaSafety:
     for i, arg in enumerate(args):
       struct.pack_into("<i", dat, 1 + i * 4, int(arg))
     dat[1 + 4 * len(args):1 + 4 * len(args) + len(payload)] = payload
-    self.panda.can_send(SAFETY_TEST_ADDR, dat, 3, fd=True)
+    self.panda.can_send(SAFETY_TEST_ADDR, dat, 3, fd=True, timeout=1000)
     deadline = time.monotonic() + 1
     while time.monotonic() < deadline:
       for addr, response, bus in self.panda.can_recv():

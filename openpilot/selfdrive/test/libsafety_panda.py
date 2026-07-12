@@ -1,7 +1,7 @@
 import struct
 import time
 
-from panda import Panda
+from panda import DLC_TO_LEN, Panda
 
 
 SAFETY_TEST_ADDR = 0x1FFFFF00
@@ -47,7 +47,7 @@ class PandaSafety:
 
   def _load(self, msg):
     packet = msg[0]
-    dat = bytes(packet.data[0:64])
+    dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
     header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
     self._call(LOAD_PACKET, payload=header + b"\0" + dat[:55])
     if len(dat) > 55:

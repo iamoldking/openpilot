@@ -168,6 +168,13 @@ node {
   env.GIT_BRANCH = checkout(scm).GIT_BRANCH
   env.GIT_COMMIT = checkout(scm).GIT_COMMIT
 
+  if (env.BRANCH_NAME == 'tmp-jenkins-hitl-safety') {
+    deviceStage("safety panda", "tizi-common", ["UNSAFE=1"], [
+      step("safety panda", "openpilot/selfdrive/test/test_safety_panda.sh", [timeout: 1800]),
+    ])
+    return
+  }
+
   def excludeBranches = ['__nightly', 'devel', 'devel-staging',
                          'release-tizi', 'release-tizi-staging', 'release-mici', 'release-mici-staging', 'testing-closet*', 'hotfix-*']
   def excludeRegex = excludeBranches.join('|').replaceAll('\\*', '.*')

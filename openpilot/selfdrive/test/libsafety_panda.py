@@ -10,6 +10,7 @@ SAFETY_TEST_ADDR = 0x1FFFFF00
 
 SET_HOOKS, RX_HOOK, TX_HOOK, FWD_HOOK, LOAD_PACKET, TICK, CONFIG_VALID, INIT, IGNITION_HOOK, GET, SET, RX_PACKET, TX_PACKET, \
   FWD_HOOK_STATE, TX_PACKET_STATE = range(1, 16)
+RX_PACKET_STATE = 16
 
 VALUES = {
   "controls_allowed": 1, "longitudinal_allowed": 2, "alternative_experience": 3,
@@ -40,6 +41,7 @@ class PandaSafety:
     self.test_timer = 0
     self.panda_timer = None
     self.relay_malfunction = False
+    self.controls_allowed = False
 
   def _close(self):
     self.stop_event.set()
@@ -66,6 +68,7 @@ class PandaSafety:
           mode = struct.unpack_from("<H", response, 6)[0]
           if hasattr(self, "safety_mode") and op != SET_HOOKS:
             assert mode == self.safety_mode, (mode, self.safety_mode)
+          self.last_controls_allowed = bool(response[8])
           return struct.unpack_from("<i", response, 1)[0]
     raise TimeoutError("panda safety test RPC timed out")
 
@@ -88,22 +91,36 @@ class PandaSafety:
 
   def set_safety_hooks(self, mode, param):
     self.relay_malfunction = False
+    self.controls_allowed = False
     ret = self._call(SET_HOOKS, mode, param)
     self.safety_mode = int(mode)
+    self.relay_malfunction = self.last_relay_malfunction
+    self.controls_allowed = self.last_controls_allowed
     return ret
 
   def safety_rx_hook(self, msg):
-    self._set_value("relay_malfunction", self.relay_malfunction)
-    ret = self._hook(RX_HOOK, RX_PACKET, msg)
+    packet = msg[0]
+    dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
+    if len(dat) <= 54:
+      header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
+      state = bytes((self.controls_allowed, self.relay_malfunction))
+      ret = bool(self._call(RX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
+    else:
+      self._set_value("controls_allowed", self.controls_allowed)
+      self._set_value("relay_malfunction", self.relay_malfunction)
+      ret = self._hook(RX_HOOK, RX_PACKET, msg)
+    self.controls_allowed = self.last_controls_allowed
     self.relay_malfunction = self.last_relay_malfunction
     return ret
 
   def safety_tx_hook(self, msg):
     packet = msg[0]
     dat = bytes(packet.data[0:DLC_TO_LEN[int(packet.data_len_code)]])
-    if len(dat) <= 55:
+    if len(dat) <= 54:
       header = bytes((int(packet.fd), int(packet.bus), int(packet.data_len_code))) + struct.pack("<i", int(packet.addr))
-      return bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(55 - len(dat)) + bytes((self.relay_malfunction,))))
+      state = bytes((self.controls_allowed, self.relay_malfunction))
+      return bool(self._call(TX_PACKET_STATE, payload=header + dat + bytes(54 - len(dat)) + state))
+    self._set_value("controls_allowed", self.controls_allowed)
     self._set_value("relay_malfunction", self.relay_malfunction)
     return self._hook(TX_HOOK, TX_PACKET, msg)
 
@@ -120,8 +137,16 @@ class PandaSafety:
   def get_relay_malfunction(self):
     return self.relay_malfunction
 
+  def set_controls_allowed(self, allowed):
+    self.controls_allowed = bool(allowed)
+    self._set_value("controls_allowed", allowed)
+
+  def get_controls_allowed(self):
+    return self.controls_allowed
+
   def safety_tick_current_safety_config(self):
     self._call(TICK)
+    self.controls_allowed = self.last_controls_allowed
 
   def safety_config_valid(self):
     return bool(self._call(CONFIG_VALID))
@@ -153,6 +178,7 @@ class PandaSafety:
     if name.startswith("get_"):
       value = VALUES[name[4:]]
       def get_value():
+        self._set_value("controls_allowed", self.controls_allowed)
         ret = self._call(GET, payload=bytes((value,)))
         return ret / 1000.0 if name in ("get_vehicle_speed_min", "get_vehicle_speed_max") else ret
       return get_value

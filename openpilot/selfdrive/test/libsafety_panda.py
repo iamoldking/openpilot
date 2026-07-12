@@ -1,3 +1,4 @@
+import atexit
 import struct
 import time
 
@@ -28,8 +29,15 @@ class PandaSafety:
   def __init__(self):
     self.panda = Panda()
     self.panda.can_clear(0xFFFF)
+    for bus in range(3):
+      self.panda.set_can_enable(bus, False)
+    atexit.register(self._close)
     self.test_timer = 0
     self.panda_timer = None
+
+  def _close(self):
+    for bus in range(3):
+      self.panda.set_can_enable(bus, True)
 
   def _call(self, op, *args, payload=b""):
     dat = bytearray(64)
@@ -89,13 +97,13 @@ class PandaSafety:
     delta = int(timer) - self.test_timer
     if delta < 0:
       raise ValueError("panda safety test timer cannot move backwards")
+    before = self._call(GET, payload=bytes((VALUES["timer"],)))
     if delta:
       time.sleep(delta / 1e6)
 
     now = self._call(GET, payload=bytes((VALUES["timer"],)))
-    if self.panda_timer is not None:
-      elapsed = (now - self.panda_timer) & 0xFFFFFFFF
-      assert delta <= elapsed < delta + 100_000, (delta, elapsed)
+    elapsed = (now - before) & 0xFFFFFFFF
+    assert delta <= elapsed < delta + 100_000, (delta, elapsed)
     self.test_timer = int(timer)
     self.panda_timer = now
 

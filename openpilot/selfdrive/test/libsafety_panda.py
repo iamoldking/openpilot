@@ -34,6 +34,7 @@ class PandaSafety:
     self.panda.can_clear(0xFFFF)
     for bus in range(3):
       self.panda.set_can_enable(bus, False)
+    self.panda_lock = threading.Lock()
     self.stop_event = threading.Event()
     self.heartbeat_thread = threading.Thread(target=self._heartbeat, daemon=True)
     self.heartbeat_thread.start()
@@ -50,10 +51,16 @@ class PandaSafety:
       self.panda.set_can_enable(bus, True)
 
   def _heartbeat(self):
-    while not self.stop_event.wait(0.5):
-      self.panda.send_heartbeat(engaged=True)
+    while not self.stop_event.is_set():
+      with self.panda_lock:
+        self.panda.send_heartbeat(engaged=True)
+      self.stop_event.wait(0.5)
 
   def _call(self, op, *args, payload=b""):
+    with self.panda_lock:
+      return self._call_locked(op, *args, payload=payload)
+
+  def _call_locked(self, op, *args, payload=b""):
     dat = bytearray(64)
     dat[0] = op
     for i, arg in enumerate(args):

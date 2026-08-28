@@ -90,3 +90,6 @@ Pipfile filter=lfs diff=lfs merge=lfs -text
 Pipfile.lock filter=lfs diff=lfs merge=lfs -text
 poetry.lock filter=lfs diff=lfs merge=lfs -text
 *.qm filter=lfs diff=lfs merge=lfs -text
+selfdrive/modeld/models/supercombo.onnx !filter !diff !merge text=auto
+selfdrive/modeld/models/dmonitoring_model.onnx !filter !diff !merge text=auto
+selfdrive/modeld/models/dmonitoring_model_q.dlc !filter !diff !merge text=auto
